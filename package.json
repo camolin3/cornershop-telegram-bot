@@ -52,6 +52,7 @@
   },
   "dependencies": {
     "date-fns": "^2.0.0-alpha.16",
+    "firebase-admin": "^6.0.0",
     "node-telegram-bot-api": "^0.30.0",
     "puppeteer": "^1.7.0",
     "sha.js": "^2.4.11"
