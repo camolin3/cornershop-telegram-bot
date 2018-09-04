@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
-import * as serviceAccount from '../serviceAccountKey.json';
+import { STATES, UserState } from '.';
+import * as serviceAccount from './serviceAccountKey.json';
 
 export class UserStorage {
   private db: FirebaseFirestore.Firestore;
@@ -12,17 +13,20 @@ export class UserStorage {
     });
 
     this.db = admin.firestore();
+    const settings = { timestampsInSnapshots: true };
+    this.db.settings(settings);
   }
 
   public async get(chatId: number) {
     const doc = await this.db.doc(`users/${chatId}`).get();
     if (!doc.exists) {
-      return {};
+      return this.set(chatId, { metadata: {}, state: STATES.GREETING });
     }
-    return doc.data();
+    return doc.data() as UserState;
   }
 
-  public set(chatId: number, value: object) {
-    return this.db.doc(`users/${chatId}`).set(value);
+  public async set(chatId: number, value: UserState) {
+    await this.db.doc(`users/${chatId}`).set(value);
+    return value;
   }
 }

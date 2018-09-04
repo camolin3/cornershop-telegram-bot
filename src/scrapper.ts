@@ -10,21 +10,18 @@ export interface Dict<T> { [id: string]: T }
 type OrderWithDate = ReturnType<typeof handleOrdersWithDate>;
 type OrderWithCommission = ReturnType<typeof handleOrdersWithCommission>;
 
-const browserPromise = puppeteer.launch({ headless: true });
+const browserPromise = puppeteer.launch({ headless: false });
 
-const contexts: {[id: number]: puppeteer.BrowserContext} = {};
-
-async function getContext(id: number = null) {
-  if (!(id in contexts)) {
-    const browser = await browserPromise;
-    contexts[id] = await browser.createIncognitoBrowserContext();
-  }
-  return contexts[id];
+async function getPage(cookies: puppeteer.SetCookie[] = []) {
+  const browser = await browserPromise;
+  const context = await browser.createIncognitoBrowserContext();
+  const page = await context.newPage();
+  await page.setCookie(...cookies);
+  return page;
 }
 
 export async function login(email: string, password: string) {
-  const context = await getContext();
-  const page = await context.newPage();
+  const page = await getPage();
   const loginUrl = 'https://cornershopapp.com/accounts/login/?next=/shoppercenter/';
   await page.goto(loginUrl, { waitUntil: 'networkidle2' });
   await page.type('#email', email);
@@ -35,10 +32,10 @@ export async function login(email: string, password: string) {
   return page.cookies();
 }
 
-export async function updatedOrderDatesAndComissions(contextId: number, cookies) {
+export async function updatedOrderDatesAndComissions(cookies) {
   const [datesInfo, amounInfo] = await Promise.all([
-    getOrdersWithDate(contextId, cookies),
-    getOrdersWithCommission(contextId, cookies),
+    getOrdersWithDate(cookies),
+    getOrdersWithCommission(cookies),
   ]);
 
   const orders: Dict<Order> = datesInfo
@@ -66,10 +63,8 @@ export async function updatedOrderDatesAndComissions(contextId: number, cookies)
   return grouped;
 }
 
-export async function getOrdersWithDate(contextId, cookies) {
-  const context = await getContext(contextId);
-  const page = await context.newPage();
-  await page.setCookie(...cookies);
+export async function getOrdersWithDate(cookies) {
+  const page = await getPage(cookies);
   const ordersUrl = 'https://cornershopapp.com/shoppercenter/orders';
   await page.goto(ordersUrl);
   const result = await page.evaluate(handleOrdersWithDate);
@@ -77,10 +72,8 @@ export async function getOrdersWithDate(contextId, cookies) {
   return result as OrderWithDate;
 }
 
-export async function getOrdersWithCommission(contextId, cookies) {
-  const context = await getContext(contextId);
-  const page = await context.newPage();
-  await page.setCookie(...cookies);
+export async function getOrdersWithCommission(cookies) {
+  const page = await getPage(cookies);
   const commissionsUrl = 'https://cornershopapp.com/shoppercenter/commissions';
   await page.goto(commissionsUrl);
 

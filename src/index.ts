@@ -1,16 +1,17 @@
 import { addDays, compareAsc, format, startOfWeek } from 'date-fns';
 import TelegramBot from 'node-telegram-bot-api';
 import { Dict, login, Order, updatedOrderDatesAndComissions } from './scrapper';
+import { UserStorage } from './usersStorage';
 import { dateToText, validateEmail } from './utils';
 
 const token = process.env.BOT_TOKEN;
-enum STATES {
+export enum STATES {
   GREETING,
   ASK_EMAIL,
   ASK_PASS,
   ANSWER_QUERIES,
 }
-interface UserState{
+export interface UserState{
   state: STATES;
   metadata: Dict<any>;
 }
@@ -25,16 +26,17 @@ const bot = new TelegramBot(token, { polling: true, onlyFirstMatch: true });
 
 bot.onText(/.*/, async (msg, match) => {
   const chatId = msg.chat.id;
-  const state = getStateFor(chatId);
+  const state = await getStateFor(chatId);
   const allStatesHandlers: { [key in STATES]: HandleState } = {
     [STATES.GREETING]: onGreeting,
     [STATES.ASK_EMAIL]: onAskEmail,
     [STATES.ASK_PASS]: onAskPass,
     [STATES.ANSWER_QUERIES]: onAnswerQueries,
   };
-  const handle = allStatesHandlers[state.state];
-  const newState = (await handle({chatId, text: match[0], state})) || state;
-  setStateFor(chatId, newState);
+  const msgHandler = allStatesHandlers[state.state];
+  const text = match[0];
+  const nextState = (await msgHandler({chatId, text, state})) || state;
+  setStateFor(chatId, nextState);
 });
 
 async function onGreeting({chatId, state}: HandleParams) {
@@ -72,7 +74,7 @@ async function onAskPass({ chatId, text, state }: HandleParams) {
   await bot.sendMessage(chatId, 'La clave funcionó! 😁');
   await bot.sendMessage(chatId, 'Buscando entre tus órdenes y comisiones... 🔎');
 
-  state.metadata.groupedByDate = await updatedOrderDatesAndComissions(chatId, cookies);
+  state.metadata.groupedByDate = await updatedOrderDatesAndComissions(cookies);
   await bot.sendMessage(chatId, 'Listo. Puedes preguntarme cuánto has ganado 🔮 \n/hoy \n/ayer \n/estaSemana o \n/semanaPasada');
 
   return { ...state, state: STATES.ANSWER_QUERIES };
@@ -101,7 +103,7 @@ function onTodayText(chatId, groupedByDate: Dict<Dict<Order>>) {
     return;
   }
   const sum = Object.entries(groupedByDate[today]).reduce((acc, [, order]) => acc + order.amount, 0);
-  bot.sendMessage(chatId, `Hoy has ganado ${sum} 💵.`);
+  bot.sendMessage(chatId, `Hoy has ganado ${formatMoney(sum)} 💵.`);
 };
 
 function onYesterdayText(chatId, groupedByDate: Dict<Dict<Order>>) {
@@ -111,7 +113,7 @@ function onYesterdayText(chatId, groupedByDate: Dict<Dict<Order>>) {
     return;
   }
   const sum = Object.entries(groupedByDate[yesterday]).reduce((acc, [, order]) => acc + order.amount, 0);
-  bot.sendMessage(chatId, `Ayer ganaste ${sum} 💰.`);
+  bot.sendMessage(chatId, `Ayer ganaste ${formatMoney(sum)} 💰.`);
 }
 
 function onWeekText(chatId, groupedByDate: Dict<Dict<Order>>) {
@@ -122,7 +124,7 @@ function onWeekText(chatId, groupedByDate: Dict<Dict<Order>>) {
     .filter(day => day in groupedByDate)
     .map(day => Object.entries(groupedByDate[day]).reduce((acc, [, order]) => acc + order.amount, 0))
     .reduce((acc, day) => acc + day, 0);
-  bot.sendMessage(chatId, `Esta semana has ganado ${sum} 💰💰.`);
+  bot.sendMessage(chatId, `Esta semana has ganado ${formatMoney(sum)} 💰💰.`);
 }
 
 function onLastWeekText(chatId, groupedByDate: Dict<Dict<Order>>) {
@@ -133,7 +135,7 @@ function onLastWeekText(chatId, groupedByDate: Dict<Dict<Order>>) {
     .filter(day => day in groupedByDate)
     .map(day => Object.entries(groupedByDate[day]).reduce((acc, [, order]) => acc + order.amount, 0))
     .reduce((acc, day) => acc + day, 0);
-  bot.sendMessage(chatId, `La semana pasada ganaste ${sum} 💸.`);
+  bot.sendMessage(chatId, `La semana pasada ganaste ${formatMoney(sum)} 💸.`);
 }
 
 function getDates(initial: Date, final: Date) {
@@ -151,17 +153,22 @@ function getDates(initial: Date, final: Date) {
 }
 
 const states: Dict<UserState> = {};
+const us = new UserStorage();
 
-function getStateFor(chatId: number) {
+async function getStateFor(chatId: number) {
   if (!(chatId in states)) {
-    states[chatId] = { state: STATES.GREETING, metadata: {} };
+    states[chatId] = await us.get(chatId);
   }
   return states[chatId];
 }
 
-function setStateFor(chatId: number, {state, metadata}: UserState) {
-  const userState = states[chatId];
-  userState.state = state;
-  userState.metadata = { ...states[chatId].metadata, ...metadata};
-  return userState;
+async function setStateFor(chatId: number, {state, metadata}: UserState) {
+  const oldState = await getStateFor(chatId);
+  const newState = { state, metadata: { ...oldState.metadata, ...metadata } };
+  states[chatId] = await us.set(chatId, newState);
+  return newState;
+}
+
+function formatMoney(value: number) {
+  return value.toLocaleString('es-CL', { style: 'currency', currency: 'CLP' });
 }
