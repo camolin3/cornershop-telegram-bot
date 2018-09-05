@@ -67,9 +67,23 @@ export async function getOrdersWithDate(cookies) {
   const page = await getPage(cookies);
   const ordersUrl = 'https://cornershopapp.com/shoppercenter/orders';
   await page.goto(ordersUrl);
-  const result = await page.evaluate(handleOrdersWithDate);
+
+  const result: OrderWithDate = [];
+  const nextPageLinkSelector = ':not(.disabled) > a[aria-label=Next]';
+
+  do {
+    const orderList: OrderWithDate = await page.evaluate(handleOrdersWithDate);
+    result.push(...orderList);
+
+    if (await page.$(nextPageLinkSelector) === null) {
+      break;
+    }
+    const navigation = page.waitForNavigation({ waitUntil: 'networkidle0' });
+    await page.click(nextPageLinkSelector);
+    await navigation;
+  } while (true)
   page.close();
-  return result as OrderWithDate;
+  return result;
 }
 
 export async function getOrdersWithCommission(cookies) {
@@ -79,13 +93,12 @@ export async function getOrdersWithCommission(cookies) {
 
   const result = [];
   const nextPageLinkSelector = ':not(.disabled) > a[aria-label=Next]';
-  const seenDates = new Set<string>();
+  const seenPaymentDates = new Set<string>();
   do {
     const orderList: OrderWithCommission = await page.evaluate(handleOrdersWithCommission);
     result.push(...orderList);
 
-    orderList.map(o => o.paymentDate)
-      .forEach(date => seenDates.add(date))
+    orderList.map(o => seenPaymentDates.add(o.paymentDate))
 
     if (await page.$(nextPageLinkSelector) === null) {
       break;
@@ -93,7 +106,7 @@ export async function getOrdersWithCommission(cookies) {
     const navigation = page.waitForNavigation({ waitUntil: 'networkidle0' });
     await page.click(nextPageLinkSelector);
     await navigation;
-  } while (seenDates.size <= 2)
+  } while (seenPaymentDates.size <= 2)
   page.close();
   return result as OrderWithCommission;
 }
@@ -105,7 +118,7 @@ export function handleOrdersWithDate() {
     const [year, month, day] = dateText.replace(/(\d+)-(\w+)-(\d+).*/, '$3-$2-$1').split('-');
     const mIndex = monthsArray.indexOf(month);
     const date = new Date(Number(year), mIndex, Number(day));
-    return isNaN(date.getDate()) ? null : date.toLocaleDateString();
+    return isNaN(date.getDate()) ? null : date.toISOString();
   };
   const getDate = tr => strToDate(cellValue(tr, 2));
 
@@ -131,7 +144,7 @@ export function handleOrdersWithCommission() {
     const [year, month, day] = dateText.replace(/(\d+)-(\w+)-(\d+).*/, '$3-$2-$1').split('-');
     const mIndex = monthsArray.indexOf(month);
     const date = new Date(Number(year), mIndex, Number(day));
-    return isNaN(date.getDate()) ? null : date.toLocaleDateString();
+    return isNaN(date.getDate()) ? null : date.toISOString();
   };
   const getPaymentDate = tr => strToDate(cellValue(tr, 2));
 
