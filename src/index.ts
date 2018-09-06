@@ -1,6 +1,6 @@
 import { addDays, compareAsc, format, startOfWeek } from 'date-fns';
 import TelegramBot from 'node-telegram-bot-api';
-import { Dict, login, Order, updatedOrderDatesAndComissions } from './scrapper';
+import { Dict, login, mergeOrdersInfo, Order, updatedOrderDatesAndComissions } from './scrapper';
 import { UserStorage } from './usersStorage';
 import { dateToText, validateEmail } from './utils';
 
@@ -74,24 +74,25 @@ async function onAskPass({ chatId, text, state }: HandleParams) {
   await bot.sendMessage(chatId, 'La clave funcionó! 😁');
   await bot.sendMessage(chatId, 'Buscando entre tus órdenes y comisiones... 🔎');
 
-  state.metadata.groupedByDate = await updatedOrderDatesAndComissions(cookies);
+  state.metadata = { ...state.metadata, ...await updatedOrderDatesAndComissions(cookies) };
   await bot.sendMessage(chatId, 'Listo. Puedes preguntarme cuánto has ganado 🔮 \n/hoy \n/ayer \n/estaSemana o \n/semanaPasada');
 
   return { ...state, state: STATES.ANSWER_QUERIES };
 }
 
 async function onAnswerQueries({ chatId, text, state }: HandleParams) {
+  const groupedByDate = await mergeOrdersInfo(state.metadata.orderDates, state.metadata.commissionDates);
   if (text.match(/\/hoy/)) {
-    onTodayText(chatId, state.metadata.groupedByDate);
+    onTodayText(chatId, groupedByDate);
   } else
   if (text.match(/\/ayer/)) {
-    onYesterdayText(chatId, state.metadata.groupedByDate);
+    onYesterdayText(chatId, groupedByDate);
   } else
   if (text.match(/\/estaSemana/)) {
-    onWeekText(chatId, state.metadata.groupedByDate);
+    onWeekText(chatId, groupedByDate);
   } else
   if (text.match(/\/semanaPasada/)) {
-    onLastWeekText(chatId, state.metadata.groupedByDate);
+    onLastWeekText(chatId, groupedByDate);
   }
   return null;
 }

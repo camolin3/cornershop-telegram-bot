@@ -33,18 +33,20 @@ export async function login(email: string, password: string) {
 }
 
 export async function updatedOrderDatesAndComissions(cookies) {
-  const [datesInfo, amounInfo] = await Promise.all([
-    getOrdersWithDate(cookies),
-    getOrdersWithCommission(cookies),
-  ]);
+  return {
+    commissionDates: await getOrdersWithCommission(cookies),
+    orderDates: await getOrdersWithDate(cookies),
+  };
+}
 
-  const orders: Dict<Order> = datesInfo
+export async function mergeOrdersInfo(orderDates: OrderWithDate, commissionDates: OrderWithCommission) {
+  const orders: Dict<Order> = orderDates
     .map(({ id, date }) => [id, new Date(date), 0] as [string, Date, number])
     .reduce((acc, [id, date, amount]) => {
       acc[id] = { id, date, amount };
       return acc;
     }, {});
-  amounInfo.reduce((acc, { id, amount }) => {
+  commissionDates.reduce((acc, { id, amount }) => {
     if (id in acc) {
       acc[id].amount += amount;
     }
