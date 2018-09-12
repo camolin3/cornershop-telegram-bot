@@ -1,8 +1,17 @@
 import * as admin from 'firebase-admin';
-import { STATES, UserState } from '.';
 import * as serviceAccount from './serviceAccountKey.json';
+import { STATES, UserState } from './types';
 
 export class UserStorage {
+  public get defaultValue() {
+    return {
+      metadata: {
+        ordersWithCommission: [],
+        ordersWithDate: [],
+      },
+      state: STATES.GREETING,
+    };
+  }
   private db: FirebaseFirestore.Firestore;
 
   constructor() {
@@ -20,7 +29,7 @@ export class UserStorage {
   public async get(chatId: number) {
     const doc = await this.db.doc(`users/${chatId}`).get();
     if (!doc.exists) {
-      return this.set(chatId, { metadata: {}, state: STATES.GREETING });
+      return this.set(chatId, this.defaultValue);
     }
     return doc.data() as UserState;
   }
@@ -28,5 +37,9 @@ export class UserStorage {
   public async set(chatId: number, value: UserState) {
     await this.db.doc(`users/${chatId}`).set(value);
     return value;
+  }
+
+  public async remove(chatId: number) {
+    return this.db.doc(`users/${chatId}`).delete();
   }
 }

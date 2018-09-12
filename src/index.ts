@@ -1,27 +1,12 @@
 import { addDays, compareAsc, format, startOfWeek } from 'date-fns';
+import { get } from 'lodash-es';
 import TelegramBot from 'node-telegram-bot-api';
-import { Dict, login, mergeOrdersInfo, Order, updatedOrderDatesAndComissions } from './scrapper';
+import { getOrdersWithCommission, getOrdersWithDate, login, mergeOrdersInfo } from './scrapper';
+import { Dict, HandleParams, HandleState, Order, STATES, UserState } from './types';
 import { UserStorage } from './usersStorage';
 import { dateToText, validateEmail } from './utils';
 
 const token = process.env.BOT_TOKEN;
-export enum STATES {
-  GREETING,
-  ASK_EMAIL,
-  ASK_PASS,
-  ANSWER_QUERIES,
-}
-export interface UserState{
-  state: STATES;
-  metadata: Dict<any>;
-}
-interface HandleParams {
-  chatId: number;
-  text: string;
-  state: UserState;
-}
-type HandleState = (params: HandleParams) => Promise<UserState> | UserState | undefined;
-
 const bot = new TelegramBot(token, { polling: true, onlyFirstMatch: true });
 
 bot.onText(/.*/, async (msg, match) => {
@@ -74,14 +59,25 @@ async function onAskPass({ chatId, text, state }: HandleParams) {
   await bot.sendMessage(chatId, 'La clave funcionó! 😁');
   await bot.sendMessage(chatId, 'Buscando entre tus órdenes y comisiones... 🔎');
 
-  state.metadata = { ...state.metadata, ...await updatedOrderDatesAndComissions(cookies) };
+  await updateOrders(state);
+
   await bot.sendMessage(chatId, 'Listo. Puedes preguntarme cuánto has ganado 🔮 \n/hoy \n/ayer \n/estaSemana o \n/semanaPasada');
 
   return { ...state, state: STATES.ANSWER_QUERIES };
 }
 
 async function onAnswerQueries({ chatId, text, state }: HandleParams) {
-  const groupedByDate = await mergeOrdersInfo(state.metadata.orderDates, state.metadata.commissionDates);
+  if (text.match(/\/cerrarSesion/)) {
+    await bot.sendMessage(chatId, 'Espero verte pronto! Borrando tus datos...');
+    await us.remove(chatId);
+    await bot.sendMessage(chatId, 'Listo! Envía /start para comenzar.');
+    return us.defaultValue;
+  }
+
+  await updateOrders(state);
+  const { ordersWithDate, ordersWithCommission } = state.metadata;
+  const groupedByDate = await mergeOrdersInfo(ordersWithDate, ordersWithCommission);
+
   if (text.match(/\/hoy/)) {
     onTodayText(chatId, groupedByDate);
   } else
@@ -168,6 +164,18 @@ async function setStateFor(chatId: number, {state, metadata}: UserState) {
   const newState = { state, metadata: { ...oldState.metadata, ...metadata } };
   states[chatId] = await us.set(chatId, newState);
   return newState;
+}
+
+async function updateOrders(state: UserState) {
+  const { cookies, ordersWithDate, ordersWithCommission } = state.metadata;
+  const lastOrderDateId = get(ordersWithDate, '[0].id', null) as string;
+  const newOrdersWithDate = getOrdersWithDate(cookies, lastOrderDateId);
+
+  const lastOrderComissionId = get(ordersWithCommission, '[0].id', null) as string;
+  const newOrdersWithCommission = getOrdersWithCommission(cookies, lastOrderComissionId);
+
+  ordersWithDate.unshift(...await newOrdersWithDate);
+  ordersWithCommission.unshift(...await newOrdersWithCommission);
 }
 
 function formatMoney(value: number) {

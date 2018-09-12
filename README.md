@@ -3,6 +3,7 @@
 A Corneshop bot for Telegram app.
 
 `npm run build:main && ndb .`
-In the ndb's terminal, run `node ./build/main/index.js`.
+
+From ndb execute `npm start`.
 
 Project created with [typescrip-starter](https://github.com/bitjson/typescript-starter).

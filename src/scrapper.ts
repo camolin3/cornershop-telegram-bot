@@ -1,14 +1,6 @@
 import puppeteer from 'puppeteer';
+import { Dict, Order, OrderWithCommission, OrderWithDate } from './types';
 import { dateToText } from './utils';
-
-export interface Order {
-  id: string;
-  date: Date;
-  amount: number;
-}
-export interface Dict<T> { [id: string]: T }
-type OrderWithDate = ReturnType<typeof handleOrdersWithDate>;
-type OrderWithCommission = ReturnType<typeof handleOrdersWithCommission>;
 
 const browserPromise = puppeteer.launch({ headless: false });
 
@@ -32,21 +24,14 @@ export async function login(email: string, password: string) {
   return page.cookies();
 }
 
-export async function updatedOrderDatesAndComissions(cookies) {
-  return {
-    commissionDates: await getOrdersWithCommission(cookies),
-    orderDates: await getOrdersWithDate(cookies),
-  };
-}
-
-export async function mergeOrdersInfo(orderDates: OrderWithDate, commissionDates: OrderWithCommission) {
-  const orders: Dict<Order> = orderDates
+export async function mergeOrdersInfo(ordersWithDates: OrderWithDate[], ordersWithCommission: OrderWithCommission[]) {
+  const orders: Dict<Order> = ordersWithDates
     .map(({ id, date }) => [id, new Date(date), 0] as [string, Date, number])
     .reduce((acc, [id, date, amount]) => {
       acc[id] = { id, date, amount };
       return acc;
     }, {});
-  commissionDates.reduce((acc, { id, amount }) => {
+  ordersWithCommission.reduce((acc, { id, amount }) => {
     if (id in acc) {
       acc[id].amount += amount;
     }
@@ -65,16 +50,21 @@ export async function mergeOrdersInfo(orderDates: OrderWithDate, commissionDates
   return grouped;
 }
 
-export async function getOrdersWithDate(cookies) {
+export async function getOrdersWithDate(cookies, lastOrderId: string) {
   const page = await getPage(cookies);
   const ordersUrl = 'https://cornershopapp.com/shoppercenter/orders';
   await page.goto(ordersUrl);
 
-  const result: OrderWithDate = [];
+  const result: OrderWithDate[] = [];
   const nextPageLinkSelector = ':not(.disabled) > a[aria-label=Next]';
+  let lastOrderIndex = -1;
 
   do {
-    const orderList: OrderWithDate = await page.evaluate(handleOrdersWithDate);
+    const orderList: OrderWithDate[] = await page.evaluate(handleOrdersWithDate);
+
+    lastOrderIndex = orderList.findIndex(order => order.id === lastOrderId);
+    if (lastOrderIndex !== -1) { orderList.length = lastOrderIndex; }
+
     result.push(...orderList);
 
     if (await page.$(nextPageLinkSelector) === null) {
@@ -83,21 +73,27 @@ export async function getOrdersWithDate(cookies) {
     const navigation = page.waitForNavigation({ waitUntil: 'networkidle0' });
     await page.click(nextPageLinkSelector);
     await navigation;
-  } while (true)
+  } while (lastOrderIndex === -1)
   page.close();
   return result;
 }
 
-export async function getOrdersWithCommission(cookies) {
+export async function getOrdersWithCommission(cookies, lastOrderId: string) {
   const page = await getPage(cookies);
   const commissionsUrl = 'https://cornershopapp.com/shoppercenter/commissions';
   await page.goto(commissionsUrl);
 
-  const result = [];
+  const result: OrderWithCommission[] = [];
   const nextPageLinkSelector = ':not(.disabled) > a[aria-label=Next]';
   const seenPaymentDates = new Set<string>();
+  let lastOrderIndex = -1;
+
   do {
-    const orderList: OrderWithCommission = await page.evaluate(handleOrdersWithCommission);
+    const orderList: OrderWithCommission[] = await page.evaluate(handleOrdersWithCommission);
+
+    lastOrderIndex = orderList.findIndex(order => order.id === lastOrderId);
+    if (lastOrderIndex !== -1) { orderList.length = lastOrderIndex; }
+
     result.push(...orderList);
 
     orderList.map(o => seenPaymentDates.add(o.paymentDate))
@@ -108,9 +104,9 @@ export async function getOrdersWithCommission(cookies) {
     const navigation = page.waitForNavigation({ waitUntil: 'networkidle0' });
     await page.click(nextPageLinkSelector);
     await navigation;
-  } while (seenPaymentDates.size <= 2)
+  } while (seenPaymentDates.size <= 2 && lastOrderIndex === -1)
   page.close();
-  return result as OrderWithCommission;
+  return result;
 }
 
 export function handleOrdersWithDate() {
