@@ -52,61 +52,71 @@ export async function mergeOrdersInfo(ordersWithDates: OrderWithDate[], ordersWi
 
 export async function getOrdersWithDate(cookies, lastOrderId: string) {
   const page = await getPage(cookies);
-  const ordersUrl = 'https://cornershopapp.com/shoppercenter/orders';
-  await page.goto(ordersUrl);
+  try {
+    const ordersUrl = 'https://cornershopapp.com/shoppercenter/orders';
+    await page.goto(ordersUrl);
 
-  const result: OrderWithDate[] = [];
-  const nextPageLinkSelector = ':not(.disabled) > a[aria-label=Next]';
-  let lastOrderIndex = -1;
+    const result: OrderWithDate[] = [];
+    const nextPageLinkSelector = ':not(.disabled) > a[aria-label=Next]';
+    let lastOrderIndex = -1;
 
-  do {
-    const orderList: OrderWithDate[] = await page.evaluate(handleOrdersWithDate);
+    do {
+      const orderList: OrderWithDate[] = await page.evaluate(handleOrdersWithDate);
 
-    lastOrderIndex = orderList.findIndex(order => order.id === lastOrderId);
-    if (lastOrderIndex !== -1) { orderList.length = lastOrderIndex; }
+      lastOrderIndex = orderList.findIndex(order => order.id === lastOrderId);
+      if (lastOrderIndex !== -1) { orderList.length = lastOrderIndex; }
 
-    result.push(...orderList);
+      result.push(...orderList);
 
-    if (await page.$(nextPageLinkSelector) === null) {
-      break;
-    }
-    const navigation = page.waitForNavigation({ waitUntil: 'networkidle0' });
-    await page.click(nextPageLinkSelector);
-    await navigation;
-  } while (lastOrderIndex === -1)
-  page.close();
-  return result;
+      if (await page.$(nextPageLinkSelector) === null) {
+        break;
+      }
+      const navigation = page.waitForNavigation({ waitUntil: 'networkidle0' });
+      await page.click(nextPageLinkSelector);
+      await navigation;
+    } while (lastOrderIndex === -1)
+    page.close();
+    return result;
+  } catch (err) {
+    await page.close();
+    throw err;
+  }
 }
 
 export async function getOrdersWithCommission(cookies, lastOrderId: string) {
   const page = await getPage(cookies);
-  const commissionsUrl = 'https://cornershopapp.com/shoppercenter/commissions';
-  await page.goto(commissionsUrl);
+  try {
+    const commissionsUrl = 'https://cornershopapp.com/shoppercenter/commissions';
+    await page.goto(commissionsUrl);
 
-  const result: OrderWithCommission[] = [];
-  const nextPageLinkSelector = ':not(.disabled) > a[aria-label=Next]';
-  const seenPaymentDates = new Set<string>();
-  let lastOrderIndex = -1;
+    const result: OrderWithCommission[] = [];
+    const nextPageLinkSelector = ':not(.disabled) > a[aria-label=Next]';
+    const seenPaymentDates = new Set<string>();
+    let lastOrderIndex = -1;
 
-  do {
-    const orderList: OrderWithCommission[] = await page.evaluate(handleOrdersWithCommission);
+    do {
+      const orderList: OrderWithCommission[] = await page.evaluate(handleOrdersWithCommission);
 
-    lastOrderIndex = orderList.findIndex(order => order.id === lastOrderId);
-    if (lastOrderIndex !== -1) { orderList.length = lastOrderIndex; }
+      lastOrderIndex = orderList.findIndex(order => order.id === lastOrderId);
+      if (lastOrderIndex !== -1) { orderList.length = lastOrderIndex; }
 
-    result.push(...orderList);
+      result.push(...orderList);
 
-    orderList.map(o => seenPaymentDates.add(o.paymentDate))
+      orderList.map(o => seenPaymentDates.add(o.paymentDate))
 
-    if (await page.$(nextPageLinkSelector) === null) {
-      break;
-    }
-    const navigation = page.waitForNavigation({ waitUntil: 'networkidle0' });
-    await page.click(nextPageLinkSelector);
-    await navigation;
-  } while (seenPaymentDates.size <= 2 && lastOrderIndex === -1)
-  page.close();
-  return result;
+      if (await page.$(nextPageLinkSelector) === null) {
+        break;
+      }
+      const navigation = page.waitForNavigation({ waitUntil: 'networkidle0' });
+      await page.click(nextPageLinkSelector);
+      await navigation;
+    } while (seenPaymentDates.size <= 2 && lastOrderIndex === -1)
+    page.close();
+    return result;
+  } catch (err) {
+    await page.close();
+    throw err;
+  }
 }
 
 export function handleOrdersWithDate() {

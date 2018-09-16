@@ -3,9 +3,10 @@ import * as serviceAccount from './serviceAccountKey.json';
 import { STATES, UserState } from './types';
 
 export class UserStorage {
-  public get defaultValue() {
+  public get defaultValue(): UserState {
     return {
       metadata: {
+        lastUpdatedAt: new Date(0).toISOString(),
         ordersWithCommission: [],
         ordersWithDate: [],
       },

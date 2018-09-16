@@ -1,4 +1,4 @@
-import { addDays, compareAsc, format, startOfWeek } from 'date-fns';
+import { addDays, compareAsc, differenceInMinutes, format, startOfWeek } from 'date-fns';
 import { get } from 'lodash-es';
 import TelegramBot from 'node-telegram-bot-api';
 import { getOrdersWithCommission, getOrdersWithDate, login, mergeOrdersInfo } from './scrapper';
@@ -74,21 +74,26 @@ async function onAnswerQueries({ chatId, text, state }: HandleParams) {
     return us.defaultValue;
   }
 
-  await updateOrders(state);
-  const { ordersWithDate, ordersWithCommission } = state.metadata;
-  const groupedByDate = await mergeOrdersInfo(ordersWithDate, ordersWithCommission);
+  try {
+    await bot.sendMessage(chatId, 'Revisando tus últimos pedidos 🤓...');
+    await updateOrders(state);
+    const { ordersWithDate, ordersWithCommission } = state.metadata;
+    const groupedByDate = await mergeOrdersInfo(ordersWithDate, ordersWithCommission);
 
-  if (text.match(/\/hoy/)) {
-    onTodayText(chatId, groupedByDate);
-  } else
-  if (text.match(/\/ayer/)) {
-    onYesterdayText(chatId, groupedByDate);
-  } else
-  if (text.match(/\/estaSemana/)) {
-    onWeekText(chatId, groupedByDate);
-  } else
-  if (text.match(/\/semanaPasada/)) {
-    onLastWeekText(chatId, groupedByDate);
+    if (text.match(/\/hoy/)) {
+      onTodayText(chatId, groupedByDate);
+    } else
+    if (text.match(/\/ayer/)) {
+      onYesterdayText(chatId, groupedByDate);
+    } else
+    if (text.match(/\/estaSemana/)) {
+      onWeekText(chatId, groupedByDate);
+    } else
+    if (text.match(/\/semanaPasada/)) {
+      onLastWeekText(chatId, groupedByDate);
+    }
+  } catch (err) {
+    await bot.sendMessage(chatId, 'Ups! Tuve un problema respondiendo tu consulta 🙄 espero se resuelva pronto 😬');
   }
   return null;
 }
@@ -167,7 +172,13 @@ async function setStateFor(chatId: number, {state, metadata}: UserState) {
 }
 
 async function updateOrders(state: UserState) {
-  const { cookies, ordersWithDate, ordersWithCommission } = state.metadata;
+  const { cookies, ordersWithDate, ordersWithCommission, lastUpdatedAt } = state.metadata;
+  const lastUpdatedDate = new Date(lastUpdatedAt);
+  const now = new Date();
+  if (differenceInMinutes(lastUpdatedDate, now) < 30) {
+    return;
+  }
+
   const lastOrderDateId = get(ordersWithDate, '[0].id', null) as string;
   const newOrdersWithDate = getOrdersWithDate(cookies, lastOrderDateId);
 
@@ -176,6 +187,7 @@ async function updateOrders(state: UserState) {
 
   ordersWithDate.unshift(...await newOrdersWithDate);
   ordersWithCommission.unshift(...await newOrdersWithCommission);
+  state.metadata.lastUpdatedAt = now.toISOString();
 }
 
 function formatMoney(value: number) {

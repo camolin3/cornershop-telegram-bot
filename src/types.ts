@@ -7,6 +7,7 @@ export enum STATES {
 export interface UserState {
   state: STATES;
   metadata: {
+    lastUpdatedAt: string,
     ordersWithCommission: OrderWithCommission[],
     ordersWithDate: OrderWithDate[],
   } & Dict<any>;
