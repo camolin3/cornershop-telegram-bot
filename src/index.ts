@@ -4,10 +4,22 @@ import TelegramBot from 'node-telegram-bot-api';
 import { getOrdersWithCommission, getOrdersWithDate, login, mergeOrdersInfo } from './scrapper';
 import { Dict, HandleParams, HandleState, Order, STATES, UserState } from './types';
 import { UserStorage } from './usersStorage';
-import { dateToText, validateEmail } from './utils';
+import { dateToText, isCloudEngine, validateEmail } from './utils';
 
-const token = process.env.BOT_TOKEN;
-const bot = new TelegramBot(token, { polling: true, onlyFirstMatch: true });
+const { BOT_TOKEN, GOOGLE_CLOUD_PROJECT } = process.env;
+
+const url = `https://${GOOGLE_CLOUD_PROJECT}.appspot.com`;
+console.log('url: ' + url);
+
+const bot = new TelegramBot(BOT_TOKEN, {
+  onlyFirstMatch: true,
+  polling: !isCloudEngine(),
+  webHook: !isCloudEngine() ? false : { port: 443 } as any,
+});
+
+if (isCloudEngine()) {
+  bot.setWebHook(`${url}/bot${BOT_TOKEN}`);
+}
 
 bot.onText(/.*/, async (msg, match) => {
   const chatId = msg.chat.id;
@@ -52,12 +64,12 @@ async function onAskPass({ chatId, text, state }: HandleParams) {
     await bot.sendMessage(chatId, 'No parece una contraseña válida. Dame tu contraseña nuevamente.');
     return null;
   }
-  await bot.sendMessage(chatId, 'Bien. Intentaré hacer login... ⏱');
+  await bot.sendMessage(chatId, 'Bien. Intentaré hacer login… ⏱');
 
   const cookies = await login(state.metadata.email, text);
   state.metadata.cookies = cookies;
   await bot.sendMessage(chatId, 'La clave funcionó! 😁');
-  await bot.sendMessage(chatId, 'Buscando entre tus órdenes y comisiones... 🔎');
+  await bot.sendMessage(chatId, 'Buscando entre tus órdenes y comisiones… 🔎');
 
   await updateOrders(state);
 
@@ -68,14 +80,14 @@ async function onAskPass({ chatId, text, state }: HandleParams) {
 
 async function onAnswerQueries({ chatId, text, state }: HandleParams) {
   if (text.match(/\/cerrarSesion/)) {
-    await bot.sendMessage(chatId, 'Espero verte pronto! Borrando tus datos...');
+    await bot.sendMessage(chatId, 'Espero verte pronto! Borrando tus datos…');
     await us.remove(chatId);
     await bot.sendMessage(chatId, 'Listo! Envía /start para comenzar.');
     return us.defaultValue;
   }
 
   try {
-    await bot.sendMessage(chatId, 'Revisando tus últimos pedidos 🤓...');
+    await bot.sendMessage(chatId, 'Revisando tus últimos pedidos… 🤓');
     await updateOrders(state);
     const { ordersWithDate, ordersWithCommission } = state.metadata;
     const groupedByDate = await mergeOrdersInfo(ordersWithDate, ordersWithCommission);
@@ -175,7 +187,7 @@ async function updateOrders(state: UserState) {
   const { cookies, ordersWithDate, ordersWithCommission, lastUpdatedAt } = state.metadata;
   const lastUpdatedDate = new Date(lastUpdatedAt);
   const now = new Date();
-  if (differenceInMinutes(lastUpdatedDate, now) < 30) {
+  if (differenceInMinutes(now, lastUpdatedDate) < 30) {
     return;
   }
 

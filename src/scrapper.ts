@@ -1,8 +1,11 @@
 import puppeteer from 'puppeteer';
 import { Dict, Order, OrderWithCommission, OrderWithDate } from './types';
-import { dateToText } from './utils';
+import { dateToText, isCloudEngine } from './utils';
 
-const browserPromise = puppeteer.launch({ headless: false });
+const browserPromise = puppeteer.launch({
+  args: ['--no-sandbox'],
+  headless: isCloudEngine(),
+});
 
 async function getPage(cookies: puppeteer.SetCookie[] = []) {
   const browser = await browserPromise;

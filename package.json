@@ -10,10 +10,12 @@
   "keywords": [],
   "scripts": {
     "info": "npm-scripts-info",
-    "build": "run-s clean && run-p build:*",
+    "build": "run-s clean && npm run build:main",
     "build:main": "tsc -p tsconfig.json",
     "build:module": "tsc -p tsconfig.module.json",
-    "start": "node -r esm ./build/main/index.js",
+    "prestart": "./node_modules/.bin/sync",
+    "start": "node -r esm -r dotenv/config ./build/main/index.js",
+    "deploy": "./node_modules/.bin/deploy production",
     "fix": "run-s fix:*",
     "fix:prettier": "prettier \"src/**/*.ts\" --write",
     "fix:tslint": "tslint --fix --project .",
@@ -49,10 +51,12 @@
     "prepare-release": "One-step: clean, build, test, publish docs, and prep a release"
   },
   "engines": {
-    "node": ">=8.9"
+    "node": ">=8"
   },
   "dependencies": {
+    "@invisible/deploy": "^1.0.13",
     "date-fns": "^2.0.0-alpha.16",
+    "dotenv": "^6.0.0",
     "esm": "^3.0.82",
     "firebase-admin": "^6.0.0",
     "lodash-es": "^4.17.10",

@@ -8,3 +8,7 @@ coverage
 *.log
 
 yarn.lock
+
+.env
+storage
+serviceAccountKey.ts

@@ -1,6 +1,6 @@
 import * as admin from 'firebase-admin';
-import * as serviceAccount from './serviceAccountKey.json';
 import { STATES, UserState } from './types';
+import { isCloudEngine } from './utils';
 
 export class UserStorage {
   public get defaultValue(): UserState {
@@ -16,15 +16,7 @@ export class UserStorage {
   private db: FirebaseFirestore.Firestore;
 
   constructor() {
-    admin.initializeApp({
-      credential: true
-        ? admin.credential.cert(serviceAccount as admin.ServiceAccount)
-        : admin.credential.applicationDefault()
-    });
-
-    this.db = admin.firestore();
-    const settings = { timestampsInSnapshots: true };
-    this.db.settings(settings);
+    this.setFirebase();
   }
 
   public async get(chatId: number) {
@@ -42,5 +34,17 @@ export class UserStorage {
 
   public async remove(chatId: number) {
     return this.db.doc(`users/${chatId}`).delete();
+  }
+
+  private async setFirebase() {
+    admin.initializeApp({
+      credential: isCloudEngine()
+        ? admin.credential.applicationDefault()
+        : admin.credential.cert((await import('./serviceAccountKey')).default as admin.ServiceAccount)
+    });
+
+    this.db = admin.firestore();
+    const settings = { timestampsInSnapshots: true };
+    this.db.settings(settings);
   }
 }
