@@ -6,10 +6,12 @@ import { Dict, HandleParams, HandleState, Order, STATES, UserState } from './typ
 import { UserStorage } from './usersStorage';
 import { dateToText, isCloudEngine, validateEmail } from './utils';
 
+process.on('uncaughtException', console.error.bind(console));
+process.on('unhandledRejection', console.error.bind(console));
+
 const { BOT_TOKEN, GOOGLE_CLOUD_PROJECT } = process.env;
 
 const url = `https://${GOOGLE_CLOUD_PROJECT}.appspot.com`;
-console.log('url: ' + url);
 
 const bot = new TelegramBot(BOT_TOKEN, {
   onlyFirstMatch: true,
@@ -18,7 +20,9 @@ const bot = new TelegramBot(BOT_TOKEN, {
 });
 
 if (isCloudEngine()) {
-  bot.setWebHook(`${url}/bot${BOT_TOKEN}`);
+  bot.setWebHook(`${url}/bot${BOT_TOKEN}`)
+    .then(() => bot.openWebHook())
+    .then(() => console.log('Webhook url: ' + url), console.error.bind(console));
 }
 
 bot.onText(/.*/, async (msg, match) => {
